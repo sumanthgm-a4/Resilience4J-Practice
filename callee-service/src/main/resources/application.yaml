@@ -1,0 +1,6 @@
+spring:
+    application:
+        name: callee-service
+
+server:
+    port: 9090
