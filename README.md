@@ -352,8 +352,8 @@ graph LR
 
 * Retry = "Try again"
 * Circuit Breaker = "Stop trying"
-* Retry is **inner layer**
-* Circuit Breaker is **outer layer**
+* Retry is **outer layer**
+* Circuit Breaker is **inner layer**
 * Order matters due to **AOP proxy chain**
 * When OPEN → system fails **fast and safely**
 
