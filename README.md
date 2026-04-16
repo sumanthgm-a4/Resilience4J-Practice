@@ -2,7 +2,7 @@
 
 ---
 
-# 🧩 PART 1 — RETRY (ISOLATED)
+# 🔁 PART 1 — RETRY
 
 ## 📌 What Retry Does
 
@@ -89,7 +89,7 @@ graph LR
 
 ---
 
-# 🔌 PART 2 — CIRCUIT BREAKER (ISOLATED)
+# 🔌 PART 2 — CIRCUIT BREAKER
 
 ## 📌 What Circuit Breaker Does
 
@@ -362,3 +362,281 @@ graph LR
 ## 🧠 Golden Rule
 
 > "If you don't understand the proxy chain, you don't understand Resilience4j."
+
+---
+
+# 🚦 PART 4 - RATE LIMITER
+
+## ⚡ Core Idea
+A **RateLimiter** controls how many requests can execute in a given time window.
+
+```
+limit-for-period: 5
+limit-refresh-period: 10s
+```
+
+👉 Means:
+- Only **5 executions allowed every 10 seconds**
+- After 10s → permits reset
+
+---
+
+## 🔑 What is a Permit?
+
+A **permit** = permission to execute your method.
+
+```
+permit = "you are allowed to run now"
+```
+
+- 5 permits → only 5 requests can run in that window
+- Once used → NOT returned when thread finishes
+- Reset only on next window
+
+---
+
+## ❗ Key Rule (MOST IMPORTANT)
+
+```
+Permits are NOT released when threads finish
+Permits reset ONLY with time
+```
+
+---
+
+## 🧠 Thread Behavior
+
+Each request (thread) does:
+
+```
+try acquire permit
+    ↓
+if success → execute method
+if fail → wait (timeout-duration)
+    ↓
+if still no permit → fallback()
+```
+
+---
+
+## ⚙️ Your Code
+
+```java
+@RateLimiter(name = "myRateLimiter", fallbackMethod = "fallback2")
+public String demonstrateRateLimiter() {
+    try {
+        Thread.sleep(Duration.ofSeconds(1));
+    } catch (InterruptedException e) {
+        e.printStackTrace();
+    }
+    System.out.println("Number of method invocations: " 
+        + CallerService.numberOfInvocations.incrementAndGet());
+    return "Sample Rate Limiter Response";
+}
+
+public String fallback2(Exception e) {
+    System.out.println("------------------------------- Rate Limiter Fallback -------------------------------");
+    return "Rate Limiter demo failed: " + e.getMessage();
+}
+```
+
+---
+
+## ⚙️ Config
+
+```yaml
+rateLimiter:
+  instances:
+    myRateLimiter:
+      limit-for-period: 5
+      limit-refresh-period: 10s
+      timeout-duration: 3s
+```
+
+---
+
+## 🧪 Mental Model
+
+Each thread has:
+
+```
+arrival_time
+deadline = arrival_time + timeout
+```
+
+And it asks:
+
+```
+Did I get a permit before my deadline?
+```
+
+---
+
+## 📊 Timeline Example
+
+### Setup:
+- 11 requests
+- limit = 5
+- timeout = 3s
+- window = 10s
+
+### Flow:
+
+```mermaid
+sequenceDiagram
+    participant R1 as Req1-5
+    participant R2 as Req6-11
+    participant RL as RateLimiter
+
+    R1->>RL: acquire permit
+    RL-->>R1: granted
+    R1->>R1: execute (1s)
+
+    R2->>RL: acquire permit
+    RL-->>R2: no permits
+
+    R2->>R2: wait (timeout=3s)
+
+    R2-->>RL: timeout expired
+    RL-->>R2: fallback
+```
+
+---
+
+## 🧠 Why Some Requests Succeed Later
+
+Because:
+
+```
+Threads can "wait" for future permits
+```
+
+If they survive long enough → they execute
+
+If not → fallback
+
+---
+
+## 🔥 Negative Permits (Internal)
+
+```
+0 → no permits
+-1 → one thread waiting
+-2 → two threads waiting
+```
+
+👉 Means:
+threads are reserving future execution slots
+
+
+---
+
+## ⚡ ApacheBench (-c)
+
+```bash
+ab -n 11 -c 5 <url>
+```
+
+👉 Means:
+- Only 5 concurrent requests
+- Others are delayed
+
+So requests are NOT truly simultaneous
+
+---
+
+## 🔥 Real Behavior
+
+```
+Requests are spread across time windows
+```
+
+So:
+
+```
+Success = permits_per_window × windows_reached
+```
+
+---
+
+## ⚠️ Timeout Purpose
+
+```
+timeout-duration = max wait time for a permit
+```
+
+- small → fail fast
+- large → wait longer
+- too large → thread pile-up risk
+
+---
+
+## 🧠 Thread Lifecycle
+```mermaid
+flowchart TD
+    A[Request arrives] --> B[Try acquire permit]
+    
+    B -->|Permit available| C[Execute method]
+    B -->|No permit| D[Wait up to timeout]
+
+    D -->|Permit becomes available| C
+    D -->|Timeout expires| E[Fallback executed]
+```
+---
+
+## 🔥 Key Insights
+
+### 1. Not concurrency control
+RateLimiter ≠ Semaphore
+
+### 2. Time-based, not execution-based
+Completion doesn’t free permits (only the window refresh does)
+
+### 3. Each request is independent
+No batches internally
+
+### 4. It's a race against time
+Not a queue
+
+---
+
+## ⚡ One-Liners
+
+- Permit = one execution slot in time window
+- Timeout = how long you're willing to wait
+- Fallback = thread lost the race
+- RateLimiter = time-based token system
+
+---
+
+## 🧠 Final Mental Model
+
+```
+Threads race against:
+    - permit availability
+    - timeout deadline
+    - window reset
+```
+
+---
+
+## 🧃 Analogy
+
+Juice shop:
+
+- 5 juices per 10 min
+- people can wait (timeout)
+- if they wait long enough → get juice
+- else → leave (fallback)
+
+---
+
+## 🔄 Difference vs Other Resilience4j Components
+### 🔁 Retry
+- Re-attempts failed calls
+### 🔌 CircuitBreaker
+- Stops calls when failures high
+### 🚦 RateLimiter
+- Controls traffic volume, not failures
+
+---

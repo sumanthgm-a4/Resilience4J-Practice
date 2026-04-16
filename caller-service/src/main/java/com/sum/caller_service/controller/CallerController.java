@@ -13,8 +13,13 @@ public class CallerController {
 
     private final CallerService callerService;
 
-    @GetMapping("/call")
+    @GetMapping("/fail")
     public String simualteFailing() {
         return callerService.failableMethod();
+    }
+
+    @GetMapping("/rate-limit")
+    public String simulateRateLimiter() {
+        return callerService.demonstrateRateLimiter();
     }
 }

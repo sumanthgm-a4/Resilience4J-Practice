@@ -18,7 +18,7 @@ resilience4j:
     circuitbreaker:
         circuitBreakerAspectOrder: 1
         instances:
-            callerServiceRetry:
+            callerServiceCB:
                 # Checks the last 3 calls to decide the state of the circuit
                 sliding-window-size: 3
                 # If >50% of the last 3 calls fail -> opens the circuit
@@ -27,6 +27,18 @@ resilience4j:
                 wait-duration-in-open-state: 10s
                 # Then half-opens the circuit for 2 calls
                 permitted-number-of-calls-in-half-open-state: 2
+    
+    rateLimiter:
+        instances:
+            myRateLimiter:
+                # Only 5 calls (5 requests => 5 threads, one per thread) allowed per window
+                # Returns fallback for the extra requests
+                limit-for-period: 5
+                # Window refreshes every 10 seconds
+                limit-refresh-period: 10s
+                # Allows subsequent threads (after the first 5) to wait for 2 seconds
+                # If they fail to execute the request -> returns a fallback 
+                timeout-duration: 3s
 
 # logging:
 #     level:
