@@ -40,6 +40,14 @@ resilience4j:
                 # If they fail to execute the request -> returns a fallback 
                 timeout-duration: 3s
 
+    timelimiter:
+        instances:
+            myTimeLimiter:
+                # Waits for 3 seconds for the thread to complete its execution
+                timeoutDuration: 3s
+                # Cancels the future if it takes longer -> myFuture.cancel()
+                cancelRunningFuture: true 
+
 # logging:
 #     level:
 #         io.github.resilience4j.retry: DEBUG

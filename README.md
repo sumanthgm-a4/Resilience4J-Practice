@@ -631,6 +631,178 @@ Juice shop:
 
 ---
 
+# ⏳ PART 5 - TIME LIMITER
+
+## 🧠 What TimeLimiter Does
+
+TimeLimiter ensures that a caller **does not wait longer than a
+configured duration**.
+
+-   It does **NOT** guarantee stopping execution
+-   It **times out the caller**, not the worker thread
+
+------------------------------------------------------------------------
+
+## ⚙️ Configuration (Spring Boot YAML)
+
+``` yaml
+resilience4j:
+  timelimiter:
+    instances:
+      myTimeLimiter:
+        timeoutDuration: 3s
+        cancelRunningFuture: true
+```
+
+### Key Properties
+
+-   `timeoutDuration`: Max wait time
+-   `cancelRunningFuture`: Calls `future.cancel(true)` on timeout
+
+------------------------------------------------------------------------
+
+## 🧵 How It Works
+
+1.  Method returns `CompletableFuture`
+2.  TimeLimiter starts timer
+3.  If task completes in time → success
+4.  If not:
+    -   Throws `TimeoutException`
+    -   Calls `future.cancel(true)` (if enabled)
+
+------------------------------------------------------------------------
+
+## 🔁 Execution Flow
+
+``` mermaid
+sequenceDiagram
+    participant Caller
+    participant TimeLimiter
+    participant WorkerThread
+
+    Caller->>TimeLimiter: Call async method
+    TimeLimiter->>WorkerThread: Start task
+    TimeLimiter->>TimeLimiter: Start timer (3s)
+
+    alt finishes before timeout
+        WorkerThread-->>TimeLimiter: Result
+        TimeLimiter-->>Caller: Success
+    else timeout occurs
+        TimeLimiter-->>Caller: TimeoutException / fallback
+        TimeLimiter->>WorkerThread: cancel(true)
+    end
+```
+
+------------------------------------------------------------------------
+
+## ⚠️ Important: Cancellation is Cooperative
+
+`future.cancel(true)`: - Sends interrupt signal - DOES NOT force kill
+thread
+
+### Correct handling
+
+``` java
+try {
+    Thread.sleep(5000);
+} catch (InterruptedException e) {
+    Thread.currentThread().interrupt();
+    return "Cancelled";
+}
+```
+
+### Wrong handling
+
+``` java
+catch (InterruptedException e) {
+    // ignore
+}
+```
+
+------------------------------------------------------------------------
+
+## ❗ Common Pitfalls
+
+### 1. Using wrong fallback signature
+
+❌ Incorrect:
+
+``` java
+public void fallback()
+```
+
+✅ Correct:
+
+``` java
+public CompletableFuture<String> fallback(Throwable t)
+```
+
+------------------------------------------------------------------------
+
+### 2. Using commonPool for blocking tasks
+
+Default:
+
+``` java
+CompletableFuture.supplyAsync(...)
+```
+
+Uses: - ForkJoinPool.commonPool()
+
+❌ Not suitable for blocking calls
+
+------------------------------------------------------------------------
+
+### 3. Ignoring interrupts
+
+Leads to: - Threads continue running - Unexpected completions
+
+------------------------------------------------------------------------
+
+## ✅ Best Practices
+
+-   Use custom executor:
+
+``` java
+ExecutorService executor = Executors.newFixedThreadPool(5);
+
+// Usage
+CompletableFuture.supplyAsync(() -> methodThatTakesTime(), executor);
+```
+
+-   Handle interrupts properly
+-   Combine with:
+    -   Bulkhead (limit threads)
+    -   CircuitBreaker (stop failures)
+
+------------------------------------------------------------------------
+
+## 🧠 Mental Model
+
+TimeLimiter says: \> "I will not wait longer than X time"
+
+NOT: \> "I will stop the work"
+
+------------------------------------------------------------------------
+
+## 🧾 Summary
+
+  Aspect           | Behavior
+  -----------------| ----------------------------
+  Timeout          | Stops waiting
+  Cancellation     | Best-effort interrupt
+  Thread stopping  | Not guaranteed
+  Return type      | CompletableFuture required
+  Fallback         | Must match signature
+
+------------------------------------------------------------------------
+
+## 🔥 Final Insight
+
+TimeLimiter controls **latency**, not **execution**.
+
+---
+
 ## 🔄 Difference vs Other Resilience4j Components
 ### 🔁 Retry
 - Re-attempts failed calls
@@ -638,5 +810,5 @@ Juice shop:
 - Stops calls when failures high
 ### 🚦 RateLimiter
 - Controls traffic volume, not failures
-
----
+### ⏳ TimeLimiter
+- Times out the caller thread

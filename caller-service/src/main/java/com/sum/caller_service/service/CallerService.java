@@ -1,6 +1,7 @@
 package com.sum.caller_service.service;
 
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.springframework.stereotype.Service;
@@ -11,6 +12,7 @@ import feign.FeignException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.github.resilience4j.retry.annotation.Retry;
+import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -43,7 +45,7 @@ public class CallerService {
     // the param "fallbackMethod"
     // Catches the exception by default
     // Exceptions could be specific too - like FeignException etc
-    public String fallback1(Exception e) {
+    private String fallback1(Exception e) {
         System.out.println("------------------------------- Retry + CB Fallback -------------------------------");
         return "Callee service had failed: " + e.getMessage();
     }
@@ -63,8 +65,36 @@ public class CallerService {
         return "Sample Rate Limiter Response";
     }
 
-    public String fallback2(Exception e) {
+    private String fallback2(Exception e) {
         System.out.println("------------------------------- Rate Limiter Fallback -------------------------------");
         return "Rate Limiter demo failed: " + e.getMessage();
+    }
+
+
+
+    // TIME LIMITER
+
+    // Simulate calling a slow method here
+    @TimeLimiter(name = "myTimeLimiter", fallbackMethod = "timeLimiterFallback")
+    public CompletableFuture<String> simulateSlowMethod() {
+        return CompletableFuture.supplyAsync(() -> this.slowMethod());
+    }
+
+    private String slowMethod() {
+        System.out.println("Method is being executed");
+        try {
+            Thread.sleep(Duration.ofSeconds(2));
+        } catch (InterruptedException e) {
+            // TODO Auto-generated catch block
+            // e.printStackTrace();
+            throw new RuntimeException(e.getMessage());
+        }
+        System.out.println("Done");
+        return "Done";
+    }
+
+    public CompletableFuture<String> timeLimiterFallback(Throwable t) {
+        System.out.println("------------------------------- Time Limiter Fallback -------------------------------");
+        return CompletableFuture.completedFuture("Timeout occurred: " + t.getMessage());
     }
 }

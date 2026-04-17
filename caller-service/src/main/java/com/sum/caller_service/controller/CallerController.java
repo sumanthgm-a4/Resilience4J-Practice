@@ -22,4 +22,9 @@ public class CallerController {
     public String simulateRateLimiter() {
         return callerService.demonstrateRateLimiter();
     }
+
+    @GetMapping("/time-limit")
+    public String simulateSlowMethod() {
+        return callerService.simulateSlowMethod().join();
+    }
 }
