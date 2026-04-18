@@ -631,7 +631,7 @@ Juice shop:
 
 ---
 
-# ⏳ PART 5 - TIME LIMITER
+# ⏳ PART 6 - TIME LIMITER
 
 ## 🧠 What TimeLimiter Does
 
