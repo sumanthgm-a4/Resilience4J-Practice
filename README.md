@@ -631,7 +631,7 @@ Juice shop:
 
 ---
 
-# ⏳ PART 6 - TIME LIMITER
+# ⏳ PART 5 - TIME LIMITER
 
 ## 🧠 What TimeLimiter Does
 
@@ -803,7 +803,7 @@ TimeLimiter controls **latency**, not **execution**.
 
 ---
 
-# 🚢 PART 5 - BULKHEADS
+# 🚢 PART 6 - BULKHEADS
 
 ## 🔥 What is a Bulkhead?
 
