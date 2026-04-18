@@ -1,0 +1,29 @@
+spring:
+    application:
+        name: resilience4j-bulkhead
+
+resilience4j:
+    # BULKHEAD
+    # Semaphore Bulkhead
+    bulkhead:
+        instances:
+            mySemaphoreBulkhead:
+                # Allows max 5 concurrent calls
+                maxConcurrentCalls: 7
+                # Max wait duration between 
+                maxWaitDuration: 0s
+
+    # ThreadPool Bulkhead
+    threadPoolBulkhead:
+        instances:
+            # Isolation of resources using different Bulkheads
+            myThreadPoolBulkhead1:
+                # Better customization
+                coreThreadPoolSize: 3
+                maxThreadPoolSize: 5
+                queueCapacity: 2
+            myThreadPoolBulkhead2:
+                # Better customization
+                coreThreadPoolSize: 4
+                maxThreadPoolSize: 6
+                queueCapacity: 8

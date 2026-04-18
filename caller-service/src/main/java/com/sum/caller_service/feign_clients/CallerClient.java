@@ -7,5 +7,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 public interface CallerClient {
 
     @GetMapping("/fail")
-    public String simulateFailing();
+    String simulateFailing();
+
+    @GetMapping("/bulkhead")
+    String bulkheadDemoMethod1();
 }

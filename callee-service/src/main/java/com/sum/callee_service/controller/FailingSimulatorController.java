@@ -1,5 +1,7 @@
 package com.sum.callee_service.controller;
 
+import java.time.Duration;
+
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -14,5 +16,20 @@ public class FailingSimulatorController {
         }
 
         return "Returned success from the failable service";
+    }
+
+    @GetMapping("/bulkhead")
+    public String bulkheadDemoMethod1() {
+        System.out.println("Method is being executed");
+        System.out.println(Thread.currentThread().getName());
+        try {
+            Thread.sleep(Duration.ofSeconds(2));
+        } catch (InterruptedException e) {
+            // TODO Auto-generated catch block
+            // e.printStackTrace();
+            throw new RuntimeException(e.getMessage());
+        }
+        System.out.println("Done");
+        return "Done";
     }
 }

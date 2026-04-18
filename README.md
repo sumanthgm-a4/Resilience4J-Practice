@@ -803,6 +803,438 @@ TimeLimiter controls **latency**, not **execution**.
 
 ---
 
+# 🚢 PART 5 - BULKHEADS
+
+## 🔥 What is a Bulkhead?
+
+- A **Bulkhead** isolates parts of your system to prevent failure in one part from cascading to others.
+- A **Bulkhead** isolates resources of the system so that one part of the system can't use up all the resources.
+
+Think:
+
+> “Limit how many requests can use this resource at once.”
+
+💡 In this setup, the bulkhead implementation is kept in a **separate Spring Boot project named `resilience4j-bulkhead`**, placed in the same directory as other services.
+This reflects real-world usage where bulkheads provide **isolation between services/modules**, not just methods.
+
+---
+
+## ⚠️ Compatibility Note
+
+This setup is **not fully compatible with Spring Boot 4 (yet)**.
+Resilience4j support is currently stable with Spring Boot 3.x, so using Boot 4 may lead to:
+
+* Annotation issues
+* AOP not triggering correctly
+* Unexpected fallback behavior
+
+👉 Stick to Spring Boot 3.x for consistent behavior.
+
+---
+
+## 🧠 How Bulkhead Prevents Failure Cascading
+
+### ❌ Without Bulkhead
+
+```text
+Service A → Service B (slow)
+          → threads get stuck
+          → thread pool exhausted
+          → Service A stops responding ❌
+```
+
+* All threads get blocked
+* Entire service becomes unresponsive
+* One failure spreads everywhere
+
+---
+
+### ✅ With Bulkhead
+
+```yaml
+Service B bulkhead:
+  maxThreadPoolSize: 5
+  queueCapacity: 2
+```
+
+---
+
+### 🔄 What happens now
+
+```text
+Incoming: 100 requests
+
+→ Only 5 run
+→ 2 wait
+→ Remaining get rejected (fallback)
+```
+
+---
+
+### 💡 Result
+
+| Component             | Status            |
+| --------------------- | ----------------- |
+| Calls to slow service | partially failing |
+| Main service          | STILL WORKING ✅   |
+| Other endpoints       | NOT affected ✅    |
+
+---
+
+## 🧱 Ship Analogy (Why “Bulkhead”?)
+
+```text
+[Compartment A] | [Compartment B] | [Compartment C]
+```
+
+If one fills with water:
+
+* It stays contained
+* Ship does NOT sink
+
+---
+
+## 🔄 Visual
+
+```mermaid
+flowchart LR
+    A[Incoming Requests] --> B{Bulkhead}
+
+    B -->|Allowed| C[Call Slow Service]
+    B -->|Rejected| D[Fallback Response]
+
+    C --> E[Limited Impact]
+    D --> F[Fast Failure]
+```
+
+---
+
+## 🔑 Core Mechanisms
+
+### 1. Resource Limiting
+
+* Limits threads / concurrent calls
+* Prevents total exhaustion
+
+---
+
+### 2. Fast Failure
+
+Instead of:
+
+```text
+wait → timeout → crash
+```
+
+You get:
+
+```text
+reject → fallback → continue
+```
+
+---
+
+### 3. Isolation
+
+Different dependencies get different limits:
+
+```text
+DB → bulkhead(5 threads)
+API → bulkhead(10 threads)
+Cache → bulkhead(20 threads)
+```
+
+👉 If DB fails:
+
+* Only DB calls suffer
+* API & Cache keep working
+
+---
+
+## 🧠 One-liner
+
+> A bulkhead doesn’t stop failure — it **contains it** so it doesn’t spread.
+
+---
+
+# ⚙️ Types of Bulkheads
+
+## 1️⃣ Semaphore Bulkhead
+
+### 🧠 Idea
+
+Limits **number of concurrent executions**.
+
+* Uses **same calling thread**
+* No queue (unless wait duration > 0)
+* Simple and lightweight
+
+---
+
+### ⚙️ Config (example)
+
+```yaml
+resilience4j:
+  bulkhead:
+    instances:
+      mySemaphoreBulkhead:
+        maxConcurrentCalls: 7
+        maxWaitDuration: 0s
+```
+
+---
+
+### 🔄 Working
+
+```mermaid
+flowchart LR
+    A[Incoming Requests] --> B{Permits Available?}
+    B -->|Yes| C[Execute Method]
+    B -->|No| D[Fallback]
+```
+
+---
+
+### 🧪 Behavior Example
+
+* Max calls = 7
+* Incoming = 10
+
+| Result   | Count |
+| -------- | ----- |
+| Executed | 7     |
+| Rejected | 3     |
+
+---
+
+### ⚠️ Key Points
+
+* No separate threads
+* Fast and low overhead
+* Can block if wait duration > 0
+
+---
+
+## 2️⃣ ThreadPool Bulkhead
+
+### 🧠 Idea
+
+Isolates execution using a **separate thread pool + queue**
+
+👉 This is where the **true “bulkhead isolation”** happens:
+
+* One overloaded component **does NOT consume all threads**
+* Other parts of the system remain unaffected
+
+---
+
+### ⚙️ Config (example)
+
+```yaml
+resilience4j:
+  threadPoolBulkhead:
+    instances:
+      myThreadPoolBulkhead1:
+        coreThreadPoolSize: 3
+        maxThreadPoolSize: 5
+        queueCapacity: 2
+```
+
+---
+
+### 🔄 Working
+
+```mermaid
+flowchart LR
+    A[Incoming Requests] --> B{Thread Available?}
+    B -->|Yes| C[Run in Pool]
+    B -->|No| D{Queue Full?}
+    D -->|No| E[Add to Queue]
+    D -->|Yes| F[Fallback]
+```
+
+---
+
+### 🧪 Capacity Calculation
+
+```text
+Total Capacity = maxThreadPoolSize + queueCapacity
+               = 5 + 2
+               = 7
+```
+
+---
+
+### 🧪 Behavior Example
+
+* Incoming = 10
+
+| Stage           | Count |
+| --------------- | ----- |
+| Running Threads | 5     |
+| Queued          | 2     |
+| Rejected        | 3     |
+
+---
+
+### ⏱ Execution Timeline
+
+```mermaid
+gantt
+    title ThreadPool Bulkhead Execution
+    dateFormat  s
+    axisFormat %S
+
+    section Running
+    Req1 :0, 3
+    Req2 :0, 3
+    Req3 :0, 3
+    Req4 :0, 3
+    Req5 :0, 3
+
+    section Queued
+    Req6 :3, 6
+    Req7 :3, 6
+
+    section Rejected
+    Req8 :0, 0
+    Req9 :0, 0
+    Req10 :0, 0
+```
+
+---
+
+## 🧠 Important Rules
+
+### ✅ For Semaphore Bulkhead
+
+* Works with normal methods (`String`, etc.)
+* Uses calling thread
+* No async required
+
+---
+
+### ✅ For ThreadPool Bulkhead
+
+* Must return:
+
+```text
+CompletableFuture<T>
+```
+
+* Uses internal thread pool
+* Supports queueing
+
+---
+
+### ❗ Fallback Rules (Critical)
+
+Fallback must match:
+
+* Same return type
+* Same parameters + `Throwable`
+
+---
+
+### Example
+
+```java
+// For synchronous
+String fallback(Throwable t)
+
+// For async
+CompletableFuture<String> fallback(Throwable t)
+```
+
+---
+
+## ⚖️ Semaphore vs ThreadPool
+
+| Feature       | Semaphore     | ThreadPool    |
+| ------------- | ------------- | ------------- |
+| Thread usage  | Caller thread | Separate pool |
+| Queue         | ❌             | ✅             |
+| Async support | ❌             | ✅             |
+| Overhead      | Low           | Higher        |
+| Isolation     | Limited       | Strong        |
+
+---
+
+## 🔥 When to Use What
+
+### Use Semaphore when:
+
+* Fast operations
+* Low latency required
+* Minimal overhead needed
+
+---
+
+### Use ThreadPool when:
+
+* External calls (DB, API)
+* Slow operations
+* Need isolation between services
+
+---
+
+## 🧪 Testing Behavior (ApacheBench)
+
+Example:
+
+```bash
+ab -n 10 -c 10 http://localhost:8080/bulkhead1
+```
+
+---
+
+## Expected Outcomes
+
+### Semaphore
+
+* Limited concurrency
+* Some fallbacks
+
+### ThreadPool
+
+* Controlled execution
+* Queue used
+* Some fallbacks
+* Multi-wave execution
+
+---
+
+## 🏁 Final Takeaways
+
+* Bulkhead ≠ rate limiter
+* It controls **concurrent access**, not request rate
+* ThreadPool bulkhead provides **true isolation**
+* Semaphore bulkhead provides **lightweight protection**
+
+---
+
+## ⚡ Mental Model
+
+```mermaid
+flowchart TD
+    A[Requests] --> B{Bulkhead Type}
+
+    B -->|Semaphore| C[Limit Concurrent Calls]
+    B -->|ThreadPool| D[Thread Pool + Queue]
+
+    C --> E[Execute or Reject]
+    D --> F[Execute / Queue / Reject]
+```
+
+---
+
+## 🧠 One-liner
+
+> Semaphore = **limit access**
+> ThreadPool = **isolate + control execution**
+
+---
+
 ## 🔄 Difference vs Other Resilience4j Components
 ### 🔁 Retry
 - Re-attempts failed calls
@@ -812,3 +1244,5 @@ TimeLimiter controls **latency**, not **execution**.
 - Controls traffic volume, not failures
 ### ⏳ TimeLimiter
 - Times out the caller thread
+### 🚢 Bulkhead
+- Isolates parts of your service

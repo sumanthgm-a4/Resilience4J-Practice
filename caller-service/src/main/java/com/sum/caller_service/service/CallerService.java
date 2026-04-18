@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import com.sum.caller_service.feign_clients.CallerClient;
 
 import feign.FeignException;
+import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.github.resilience4j.retry.annotation.Retry;
@@ -55,6 +56,8 @@ public class CallerService {
     // RATE LIMITER
 
     @RateLimiter(name = "myRateLimiter", fallbackMethod = "fallback2")
+    // Consider this to be an external method please
+    // I got too lazy to put this in the callee-service
     public String demonstrateRateLimiter() {
         try {
             Thread.sleep(Duration.ofSeconds(1));
@@ -80,6 +83,8 @@ public class CallerService {
         return CompletableFuture.supplyAsync(() -> this.slowMethod());
     }
 
+    // Consider this to be an external method please
+    // I got too lazy to put this in the callee-service
     private String slowMethod() {
         System.out.println("Method is being executed");
         try {
@@ -97,4 +102,33 @@ public class CallerService {
         System.out.println("------------------------------- Time Limiter Fallback -------------------------------");
         return CompletableFuture.completedFuture("Timeout occurred: " + t.getMessage());
     }
+
+
+
+    // BULKHEAD
+
+    // 1. SEMAPHORE BULKHEAD
+    @Bulkhead(name = "myBulkhead", type = Bulkhead.Type.SEMAPHORE, fallbackMethod = "bulkheadFallback")
+    public String simulateSemaphoreBulkhead() {
+        return callerClient.bulkheadDemoMethod1();
+    }
+
+    // 2. THREADPOOL BULKHEAD 
+    // Consider these two below methods as two different services
+    // requiring two different configs of resources
+    // hence use two different ThreadPool Bulkheads
+    @Bulkhead(name = "myThreadPoolBulkhead1", type = Bulkhead.Type.THREADPOOL, fallbackMethod = "bulkheadFallback")
+    public String callExternal1() {
+        return callerClient.bulkheadDemoMethod1();
+    }
+
+    @Bulkhead(name = "myThreadPoolBulkhead2", type = Bulkhead.Type.THREADPOOL, fallbackMethod = "bulkheadFallback")
+    public CompletableFuture<String> callExternal2() {
+        return CompletableFuture.supplyAsync(() -> callerClient.bulkheadDemoMethod1());
+    }
+
+    private String bulkheadFallback(Throwable t) {
+        System.out.println("------------------------------- Bulkhead Fallback -------------------------------");
+        return "Fallback returned: " + t.getMessage(); 
+    } 
 }

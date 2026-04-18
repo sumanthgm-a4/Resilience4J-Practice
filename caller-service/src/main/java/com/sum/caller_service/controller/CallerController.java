@@ -27,4 +27,20 @@ public class CallerController {
     public String simulateSlowMethod() {
         return callerService.simulateSlowMethod().join();
     }
+
+    @GetMapping("/semaphore-bulkhead")
+    public String simulateSemaphoreBulkhead() {
+        return callerService.simulateSemaphoreBulkhead();
+    }
+
+    @GetMapping("/threadpool-bulkhead-1")
+    public String simulateThreadPoolBulkhead1() {
+        return callerService.callExternal1();
+    }
+
+    @GetMapping("/threadpool-bulkhead-2")
+    public String simulateThreadPoolBulkhead2() {
+        return callerService.callExternal2().join();
+    }
+
 }

@@ -6,6 +6,9 @@ server:
     port: 8080
 
 resilience4j:
+
+
+    # RETRY
     retry:
         retryAspectOrder: 2
         instances:
@@ -15,6 +18,9 @@ resilience4j:
                 # Duration between each call
                 wait-duration: 2s
 
+
+
+    # CIRCUIT BREAKER
     circuitbreaker:
         circuitBreakerAspectOrder: 1
         instances:
@@ -27,7 +33,10 @@ resilience4j:
                 wait-duration-in-open-state: 10s
                 # Then half-opens the circuit for 2 calls
                 permitted-number-of-calls-in-half-open-state: 2
-    
+
+
+
+    # RATE LIMITER
     rateLimiter:
         instances:
             myRateLimiter:
@@ -40,13 +49,43 @@ resilience4j:
                 # If they fail to execute the request -> returns a fallback 
                 timeout-duration: 3s
 
+
+
+    # TIME LIMITER
     timelimiter:
         instances:
             myTimeLimiter:
                 # Waits for 3 seconds for the thread to complete its execution
                 timeoutDuration: 3s
                 # Cancels the future if it takes longer -> myFuture.cancel()
-                cancelRunningFuture: true 
+                cancelRunningFuture: true
+
+
+
+    # BULKHEAD
+    # Semaphore Bulkhead
+    bulkhead:
+        instances:
+            myBulkhead:
+                # Allows max 5 concurrent calls
+                maxConcurrentCalls: 5
+                # Max wait duration between 
+                maxWaitDuration: 0s
+
+    # ThreadPool Bulkhead
+    threadPoolBulkhead:
+        instances:
+            # Isolation of resources using different Bulkheads
+            myThreadPoolBulkhead1:
+                # Better customization
+                coreThreadPoolSize: 3
+                maxThreadPoolSize: 5
+                queueCapacity: 2
+            myThreadPoolBulkhead2:
+                # Better customization
+                coreThreadPoolSize: 4
+                maxThreadPoolSize: 6
+                queueCapacity: 8
 
 # logging:
 #     level:
